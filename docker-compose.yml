@@ -4,14 +4,18 @@ services:
     container_name: certwatch-web
     ports:
       - "5000:5000"
+    env_file:
+      - .env
     environment:
-      SECRET_KEY: certwatch-demo-secret
-      DATABASE_URL: mysql+pymysql://certwatch:certwatch@db:3306/certwatch
-      CERT_EXPIRY_WARNING_DAYS: 30
-      ACME_DIRECTORY_URL: https://pebble:14000/dir
-      ACME_EMAIL: certwatch@example.invalid
-      ACME_CA_CERT: /app/pebble.minica.pem
-      ACME_STORAGE: /app/data/acme
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      CERT_EXPIRY_WARNING_DAYS: ${CERT_EXPIRY_WARNING_DAYS}
+      ACME_DIRECTORY_URL: ${ACME_DIRECTORY_URL}
+      ACME_EMAIL: ${ACME_EMAIL}
+      ACME_DOMAIN: ${ACME_DOMAIN}
+      ACME_CA_CERT: ${ACME_CA_CERT}
+      ACME_STORAGE: ${ACME_STORAGE}
+      ACME_CERT_STORAGE: ${ACME_CERT_STORAGE}
     depends_on:
       db:
         condition: service_healthy
