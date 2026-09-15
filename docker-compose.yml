@@ -1,0 +1,61 @@
+services:
+  web:
+    build: .
+    container_name: certwatch-web
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: certwatch-demo-secret
+      DATABASE_URL: mysql+pymysql://certwatch:certwatch@db:3306/certwatch
+      CERT_EXPIRY_WARNING_DAYS: 30
+      ACME_DIRECTORY_URL: https://pebble:14000/dir
+      ACME_EMAIL: certwatch@example.invalid
+      ACME_CA_CERT: /app/pebble.minica.pem
+      ACME_STORAGE: /app/data/acme
+    depends_on:
+      db:
+        condition: service_healthy
+      pebble:
+        condition: service_started
+    volumes:
+      - certwatch_acme:/app/data/acme
+      - certwatch_certs:/app/certificates/acme
+      - ./pebble.minica.pem:/app/pebble.minica.pem:ro
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.4
+    container_name: certwatch-db
+    environment:
+      MYSQL_DATABASE: certwatch
+      MYSQL_USER: certwatch
+      MYSQL_PASSWORD: certwatch
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3307:3306"
+    volumes:
+      - certwatch_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "certwatch", "-pcertwatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  pebble:
+    image: ghcr.io/letsencrypt/pebble:2.10.0
+    container_name: certwatch-pebble
+    command: -config /test/config/pebble-config.json
+    ports:
+      - "14000:14000"
+      - "15000:15000"
+    environment:
+      PEBBLE_VA_NOSLEEP: "1"
+      PEBBLE_VA_ALWAYS_VALID: "1"
+      PEBBLE_WFE_NONCEREJECT: "0"
+    restart: unless-stopped
+
+volumes:
+  certwatch_mysql:
+  certwatch_acme:
+  certwatch_certs:
