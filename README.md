@@ -1,161 +1,93 @@
-# CertWatch_ACME
+# CertWatch Lab
 
-A TLS/SSL certificate monitoring and automated renewal web application built with Flask, MySQL, and ACME v2 (Pebble test CA).
+A self-hosted TLS certificate monitoring lab: it scans certificates, watches
+Certificate Transparency logs for potentially similar domains that need
+investigation, renews its own
+certificate through the ACME protocol (Pebble test CA, Let's Encrypt staging,
+or Let's Encrypt production), raises alerts, keeps an audit log and produces
+PDF/CSV reports.
 
----
+Built with Flask + SQLite + APScheduler. Ships with Docker Compose for an
+Ubuntu 24.04 VPS.
 
-## Prerequisites
+## What it does
 
-- [Docker](https://docs.docker.com/get-docker/) (v20.10+)
-- [Docker Compose](https://docs.docker.com/compose/install/) (v2.0+)
+| Area | Features |
+|---|---|
+| Auth | Login/logout, salted password hashes (Werkzeug), roles (Administrator / Analyst), login rate limiting, CSRF tokens on every form |
+| TLS scanning | On-demand and scheduled scans, issuer/subject/SAN/serial/validity/TLS version, chain + hostname verification flag, 0-100 risk score with reasons |
+| CT monitoring | crt.sh queries, look-alike scoring (string/edit/overlap/homoglyph, prefix floor), findings deduplicated, Critical/High/Medium/Low |
+| Renewal | Hand-written ACME v2 (RFC 8555) client, HTTP-01 challenge, modes: `pebble`, `staging`, `production` (production needs explicit opt-in), auto-renew at 30 days, renewal history |
+| Alerts | Expiry thresholds 30/14/7 days (deduplicated), expired, look-alike, renewal success/failure; email + webhook; **test mode ON by default** |
+| Audit | Every login, scan, watchlist change, renewal and denial is recorded (no secrets) |
+| Reports | Certificate / CT findings / renewal PDFs (ReportLab) and CSV export |
+| Ops | `/health` endpoint, security headers, scheduled jobs with duplicate-run prevention, job status on the dashboard |
 
-No Python installation required on the host — everything runs inside containers.
-
----
-
-## Quick Start
+## Quick start (local, Docker)
 
 ```bash
-# Build and start all services
-docker compose up --build -d
-
-# Verify all containers are running
-docker compose ps
+cp .env.example .env            # then edit: SECRET_KEY, ADMIN_PASSWORD
+openssl rand -hex 32            # good SECRET_KEY value
+docker compose --profile pebble up -d --build
+# open http://localhost  - log in with ADMIN_USERNAME / ADMIN_PASSWORD
 ```
 
-The app is available at **http://localhost:5000**.
+With `ACME_MODE=pebble` the **Renew now** button issues a real certificate
+from the local Pebble CA (not publicly trusted - that is the point of a test
+CA). `pebble.minica.pem` is the root that secures Pebble's own HTTPS ACME
+endpoint (the app trusts the Pebble API through it); the certificates Pebble
+issues are still test-only.
 
-Default login credentials:
-- **Username:** `admin`
-- **Password:** `admin123`
-
----
-
-## Docker Compose Commands
-
-### Starting and Stopping
-
-| Command | Description |
-|---|---|
-| `docker compose up -d` | Start all containers in the background (detached mode) |
-| `docker compose up --build -d` | Rebuild images and start all containers in the background |
-| `docker compose up` | Start all containers in the foreground (logs stream to terminal) |
-| `docker compose down` | Stop and remove all containers, networks |
-| `docker compose down -v` | Stop and remove all containers, networks, **and volumes** (deletes all data) |
-| `docker compose stop` | Stop all containers without removing them |
-| `docker compose start` | Start stopped containers without rebuilding |
-| `docker compose restart` | Restart all running containers |
-
-### Building
-
-| Command | Description |
-|---|---|
-| `docker compose build` | Build the web image without starting containers |
-| `docker compose build --no-cache` | Build from scratch — no Docker layer caching, downloads everything fresh |
-| `docker compose up --build` | Build and immediately start containers |
-| `docker compose up --build --no-cache -d` | Full fresh rebuild + start in background |
-
-### Viewing Logs
-
-| Command | Description |
-|---|---|
-| `docker compose logs` | View logs from all containers |
-| `docker compose logs -f` | Follow (tail) logs from all containers |
-| `docker compose logs web` | View logs from the web container only |
-| `docker compose logs -f web` | Follow logs from the web container only |
-| `docker compose logs db` | View logs from the MySQL container only |
-| `docker compose logs pebble` | View logs from the Pebble CA container only |
-
-### Inspecting Containers
-
-| Command | Description |
-|---|---|
-| `docker compose ps` | List all containers and their status |
-| `docker compose exec web bash` | Open a shell inside the running web container |
-| `docker compose exec db mysql -u certwatch -pcertwatch certwatch` | Open a MySQL shell inside the database container |
-| `docker compose exec web pip list` | List installed Python packages inside the web container |
-
-### Removing Everything
-
-| Command | Description |
-|---|---|
-| `docker compose down` | Remove containers and networks (data volumes preserved) |
-| `docker compose down -v` | Remove containers, networks, **and all data volumes** |
-| `docker compose down --rmi all` | Remove containers, networks, **and all built images** |
-| `docker compose down -v --rmi all` | Remove everything — containers, networks, images, and volumes |
-
----
-
-## Common Workflows
-
-### First-Time Setup
+## Quick start (local, no Docker)
 
 ```bash
-git clone <repo-url>
-cd CertWatch_ACME
-docker compose up --build -d
-docker compose ps
-# Open http://localhost:5000
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env            # edit secrets
+python run.py                   # http://localhost:8000
 ```
 
-### After Code Changes
+## Running the tests
 
 ```bash
-docker compose up --build -d
+python3 -m pytest -q
 ```
 
-### After Dependency Changes (requirements.txt)
+External services are mocked except one deliberately live TLS scan of
+`example.com` (skipped when the network is unavailable). Docker/Pebble tests
+are listed in `docs/FEATURE_CHECKLIST.md` with honest statuses.
 
-```bash
-docker compose build --no-cache
-docker compose up -d
-```
+## Status
 
-### Full Clean Rebuild (nuclear option)
+Core features are covered by an automated test suite - see
+`docs/FEATURE_CHECKLIST.md` for per-feature results, including the 2026-11-02
+VPS run (Docker startup, Pebble renewal, then Let's Encrypt staging and
+production issuance). The scheduler's jobs are individually tested, but a full
+scheduled cycle end-to-end has not been separately observed. Real email and
+webhook delivery is untested: `ALERT_TEST_MODE=true` (the default) records
+alerts without sending anything.
 
-```bash
-docker compose down -v --rmi all
-docker compose up --build -d
-```
+## Documentation
 
-### Viewing Real-Time Logs During Development
+- `docs/DEPLOY_VPS.md` - deploy on the Ubuntu 24.04 VPS step by step
+- `docs/GODADDY_DNS.md` - point certwatchlab.in at the VPS in GoDaddy
+- `docs/LE_STAGING_TEST.md` - verify a real Let's Encrypt staging issuance
+- `docs/PRODUCTION_CHECKLIST.md` - safe switch from staging to production
+- `docs/TROUBLESHOOTING.md` - common errors and fixes
+- `docs/MODULES.md` - what every module does (viva preparation)
+- `docs/FEATURE_CHECKLIST.md` - every feature with its honest test status
 
-```bash
-docker compose up --build
-```
+## Security notes
 
-(Runs in foreground — Ctrl+C to stop)
-
----
-
-## Services
-
-| Service | Container | Image | Port | Purpose |
-|---|---|---|---|---|
-| `web` | certwatch-web | Built from Dockerfile | `5000` | Flask application |
-| `db` | certwatch-db | mysql:8.4 | `3307` (host) / `3306` (internal) | MySQL database |
-| `pebble` | certwatch-pebble | ghcr.io/letsencrypt/pebble:2.10.0 | `14000`, `15000` | ACME test CA |
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `SECRET_KEY` | `certwatch-demo-secret` | Flask secret key for sessions |
-| `DATABASE_URL` | `mysql+pymysql://certwatch:certwatch@db:3306/certwatch` | SQLAlchemy database URI |
-| `CERT_EXPIRY_WARNING_DAYS` | `30` | Days before expiry to flag a certificate |
-| `ACME_DIRECTORY_URL` | `https://pebble:14000/dir` | ACME directory endpoint |
-| `ACME_EMAIL` | `certwatch@example.invalid` | Email for ACME account registration |
-| `ACME_CA_CERT` | `/app/pebble.minica.pem` | Path to Pebble root CA certificate |
-| `ACME_STORAGE` | `/app/data/acme` | Path to store ACME account keys |
-
----
-
-## Volumes
-
-| Volume | Purpose |
-|---|---|
-| `certwatch_mysql` | MySQL database data persistence |
-| `certwatch_acme` | ACME account keys and metadata |
-| `certwatch_certs` | Downloaded/renewed certificates |
+- The scanner refuses non-public targets (SSRF protection) unless
+  `SCAN_ALLOW_PRIVATE=true`.
+- Renewal only runs for domains in `ALLOWED_RENEWAL_DOMAINS`.
+- `ALERT_TEST_MODE=true` is the default: no email/webhook is sent until you
+  deliberately turn it off.
+- Production ACME issuance requires `ALLOW_PRODUCTION_ACME=true` after a
+  successful staging run. Respect Let's Encrypt rate limits.
+- In the packaged `docker-compose.yml` the Pebble test CA binds to
+  127.0.0.1 only, so a fresh clone cannot expose it publicly; the web and
+  scheduler containers reach it over the internal Docker network.
+- Secrets live in `.env` (never committed). Audit logs and the settings page
+  never show secrets.

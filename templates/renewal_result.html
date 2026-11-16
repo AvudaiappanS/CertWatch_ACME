@@ -1,1 +1,39 @@
-{% extends "base.html" %}{% block content %}<div class="card"><h2>Real ACME Renewal — Pebble Test CA</h2><p><b>Domain:</b> {{cert.domain}}</p><p><b>Old expiry:</b> {{old}}</p><p><b>New expiry:</b> {{new}}</p><h3>ACME workflow</h3><ol>{% for s in stages %}<li>✓ {{s}}</li>{% endfor %}</ol><p><b>Status:</b> SUCCESS (ACME-PEBBLE)</p><p><b>Issuer:</b> {{result.issuer}}</p><p><b>Serial:</b> {{result.serial_number}}</p><p><b>Certificate:</b> {{result.certificate_path}}</p><div style="background:#fff3cd;padding:12px;border-radius:8px">Pebble is a local ACME test CA. PEBBLE_VA_ALWAYS_VALID=1 is enabled so the ACME challenge POST is exercised without requiring public DNS/Internet validation. Never use this CA in production.</div></div>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">ACME TEST LAB</div>
+{% if renewal.status == 'SUCCESS' %}
+<h1>Renewal completed</h1>
+<p class="muted">This was a real ACME protocol exchange with the {{ ca_name }}.</p>
+<div class="panel">
+  <div class="success-box">
+    <b>SUCCESS - ACME / {{ renewal.acme_mode|upper }}</b><br>
+    {{ domain }} received a new {{ 'test ' if renewal.acme_mode == 'pebble' else '' }}certificate.
+  </div>
+  <div class="details">
+    <div><span>Old expiry</span><b>{{ renewal.old_expiry or '-' }}</b></div>
+    <div><span>New expiry</span><b>{{ renewal.new_expiry or '-' }}</b></div>
+    <div><span>Issuer</span><b>{{ renewal.issuer or '-' }}</b></div>
+    <div><span>Serial</span><b>{{ renewal.serial_number or '-' }}</b></div>
+  </div>
+  <h2>ACME steps</h2>
+  <ol>
+    <li>ACME directory loaded</li>
+    <li>Account created or reused</li>
+    <li>Order created</li>
+    <li>HTTP-01 challenge requested</li>
+    <li>{{ ca_short }} accepted the challenge{{ ' in test mode' if renewal.acme_mode == 'pebble' else '' }}</li>
+    <li>CSR finalized</li>
+    <li>Certificate downloaded and stored</li>
+  </ol>
+  <div class="note">{{ ca_note }}</div>
+  <a class="button" href="{{ url_for('dashboard.dashboard') }}">Back to dashboard</a>
+</div>
+{% else %}
+<h1>Renewal failed</h1>
+<p class="muted">The ACME protocol exchange with the {{ ca_name }} did not complete.</p>
+<div class="panel">
+  <div class="warning"><b>FAILED - ACME / {{ renewal.acme_mode|upper }}</b><br>{{ renewal.error }}</div>
+  <a class="button" href="{{ url_for('renewal.history') }}">Back to renewal manager</a>
+</div>
+{% endif %}
+{% endblock %}

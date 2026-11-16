@@ -1,8 +1,7 @@
-.venv
-__pycache__
+data/
+*.db
+.env
+__pycache__/
 *.pyc
-.git
-logs
-reports/generated
-data
-certificates/acme
+tests/
+.git/

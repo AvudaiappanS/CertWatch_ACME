@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="hero">
+  <div>
+    <div class="eyebrow">SCAN COMPLETE</div>
+    <h1>{{ cert.domain }}</h1>
+    <p>Certificate information collected from the domain's TLS endpoint.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('ct.findings', domain=cert.domain) }}">Check CT logs &rarr;</a>
+</div>
+
+<div class="cards">
+  <div class="card"><small>TLS version</small><strong>{{ cert.tls_version or '-' }}</strong></div>
+  <div class="card"><small>Days remaining</small><strong>{{ cert.days_remaining if cert.days_remaining is not none else '-' }}</strong></div>
+  <div class="card"><small>Risk score</small><strong>{{ latest.risk_score if latest and latest.risk_score is not none else '-' }}{% if latest and latest.risk_score is not none %}/100{% endif %}</strong></div>
+</div>
+
+<div class="panel">
+  <h2>Certificate details</h2>
+  <div class="details">
+    <div><span>Issuer</span><b>{{ cert.issuer or '-' }}</b></div>
+    <div><span>Issue date</span><b>{{ cert.issue_date or '-' }}</b></div>
+    <div><span>Expiry date</span><b>{{ cert.expiry_date or '-' }}</b></div>
+    <div><span>Serial</span><b>{{ cert.serial_number or '-' }}</b></div>
+  </div>
+  {% if latest and latest.risk_reasons %}
+  <div class="warning">
+    <b>Risk reasons</b>
+    <ul style="margin:8px 0 0 18px;padding:0">
+      {% for reason in latest.risk_reasons.split(';') if reason.strip() %}
+      <li>{{ reason.strip() }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if not cert.verified %}
+  <div class="warning"><b>Verification:</b> certificate chain or hostname check failed - {{ cert.verify_error }}</div>
+  {% endif %}
+  <form method="post" action="{{ url_for('renewal.trigger') }}" style="margin-top:16px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="domain" value="{{ cert.domain }}">
+    <button type="submit">Run ACME Lab Renewal</button>
+  </form>
+</div>
+{% endblock %}

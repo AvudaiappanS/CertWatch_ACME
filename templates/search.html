@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">TLS CERTIFICATE SCAN</div>
+<h1>Search Domain</h1>
+<p class="muted">Enter a domain name to inspect its live TLS certificate, expiry and risk score.</p>
+<div class="panel search-panel">
+  <h2>Domain to scan</h2>
+  <form method="post" action="{{ url_for('scanner.scan') }}" class="search-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="domain" placeholder="example.com" required>
+    <button type="submit">Scan TLS certificate</button>
+  </form>
+  <p class="muted" style="margin-top:14px">The scan connects to port 443, reads the certificate chain and stores the result in the inventory.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">ADMINISTRATOR</div>
+<h1>Runtime settings</h1>
+<p class="muted">Read-only view of the effective configuration. Change values in the
+environment / .env and restart. Secrets are never displayed.</p>
+<div class="panel">
+  <table class="settings-table">
+    {% for key, value in settings.items() %}
+    <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

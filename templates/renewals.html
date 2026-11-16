@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">ACME RENEWAL MANAGER</div>
+<h1>Certificate Renewal</h1>
+<p class="muted">Test renewals with Pebble, then issue a real Let's Encrypt certificate for {{ primary_domain }}.</p>
+
+<div class="two">
+  <div class="panel">
+    <h2>Renewal configuration</h2>
+    <div class="details" style="margin-bottom:0">
+      <div><span>Domain</span><b>{{ primary_domain }}</b></div>
+      <div><span>ACME mode</span><b>{{ mode_label }}</b></div>
+      <div><span>Challenge type</span><b>HTTP-01</b></div>
+      <div><span>Auto-renew</span><b>{{ 'Enabled - ' ~ renew_before ~ ' days before expiry' if scheduler_enabled else 'Disabled' }}</b></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Current certificate</h2>
+    {% if cert %}
+    <div class="details" style="margin-bottom:0">
+      <div><span>Issuer</span><b>{{ cert.issuer or '-' }}</b></div>
+      <div><span>Issued</span><b>{{ cert.issue_date.strftime('%Y-%m-%d') if cert.issue_date else '-' }}</b></div>
+      <div><span>Expires</span><b>{{ cert.expiry_date.strftime('%Y-%m-%d') if cert.expiry_date else '-' }}</b></div>
+      <div><span>Next renewal</span><b>{{ next_renewal.strftime('%Y-%m-%d') if next_renewal else '-' }}</b></div>
+    </div>
+    {% else %}
+    <div class="empty">No certificate stored for {{ primary_domain }} yet. Run a scan or a renewal.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="section-head"><h2>Renewal history</h2><span>Pebble and Let's Encrypt &middot; <a href="{{ url_for('reports.renewals_pdf') }}">Download PDF</a></span></div>
+  {% if renewals %}
+  <table>
+    <tr><th>Date</th><th>Mode</th><th>Challenge</th><th>Old expiry</th><th>New expiry</th><th>Status</th></tr>
+    {% for r in renewals %}
+    <tr>
+      <td>{{ r.created_at.strftime('%d %b %Y') }}</td>
+      <td>{{ 'Pebble (Test)' if r.acme_mode == 'pebble' else "Let's Encrypt" ~ (' (Staging)' if r.acme_mode == 'staging' else '') }}</td>
+      <td>{{ r.challenge_type or 'HTTP-01' }}</td>
+      <td>{{ r.old_expiry.strftime('%Y-%m-%d') if r.old_expiry else '-' }}</td>
+      <td>{{ r.new_expiry.strftime('%Y-%m-%d') if r.new_expiry else '-' }}</td>
+      <td>{{ r.status }}{% if r.error %}: {{ r.error[:100] }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty">No renewals have run yet.</div>
+  {% endif %}
+  {% if session.get('role') == 'Administrator' %}
+  <form method="post" action="{{ url_for('renewal.trigger') }}" style="margin-top:16px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="domain" value="{{ primary_domain }}">
+    <button type="submit">Renew now</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

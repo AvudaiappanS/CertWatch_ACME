@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="hero">
+  <div>
+    <div class="eyebrow">REPORTS AND AUDIT</div>
+    <h1>Reports &amp; History</h1>
+    <p>Download scan history and look-alike findings, and review user activity.</p>
+  </div>
+  <a class="button" href="{{ url_for('reports.scans_csv') }}">Export CSV</a>
+</div>
+
+<div class="panel">
+  <div class="section-head"><h2>Scan history</h2><span>Last {{ scans|length }} scans &middot; <a href="{{ url_for('reports.certificates_pdf') }}">Download PDF</a></span></div>
+  {% if scans %}
+  <table>
+    <tr><th>Time</th><th>Domain</th><th>Days left</th><th>Risk score</th><th>Result</th></tr>
+    {% for s in scans %}
+    <tr>
+      <td>{{ s.scan_time.strftime('%d %b %H:%M') }}</td>
+      <td><b>{{ s.certificate.domain if s.certificate else '(no certificate)' }}</b></td>
+      <td>{{ s.days_remaining if s.days_remaining is not none else '-' }}</td>
+      <td>{{ s.risk_score if s.risk_score is not none else '-' }}/100</td>
+      <td>{{ s.status }}{% if s.error %}: {{ s.error }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty">No scans recorded yet.</div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="section-head"><h2>Audit log</h2><span>User actions</span></div>
+  {% if entries %}
+  <table>
+    <tr><th>Time</th><th>User</th><th>Role</th><th>Action</th></tr>
+    {% for e in entries %}
+    <tr>
+      <td>{{ e.ts.strftime('%d %b %H:%M') }}</td>
+      <td>{{ e.username }}</td>
+      <td>{{ e.role }}</td>
+      <td>{{ e.summary or (e.action ~ ' ' ~ (e.object or '')) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty">No audit entries yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

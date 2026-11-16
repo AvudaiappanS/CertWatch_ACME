@@ -1,19 +1,15 @@
-# Secrets — never commit the real .env
+# Secrets and local config
 .env
+.env.bak*
+
+# Runtime data
+*.db
+*.sqlite3
+data/
+instance/
 
 # Python
 __pycache__/
-*.py[cod]
-*.egg-info/
+*.pyc
 .venv/
 venv/
-
-# IDE / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Docker volumes / runtime data (created by containers)
-data/acme/*
-certificates/acme/*

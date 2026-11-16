@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">CERTIFICATE TRANSPARENCY</div>
+<h1>CT Log Monitor</h1>
+<p class="muted">Find certificate names that look similar to your protected domain.</p>
+
+<div class="panel search-panel">
+  <h2>Protected domain</h2>
+  <form method="post" action="{{ url_for('ct.scan') }}" class="search-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="domain" value="{{ domain }}" placeholder="certwatchlab.in" required>
+    <button type="submit">Run CT Scan</button>
+  </form>
+  <p class="muted" style="margin-top:14px">Source: public Certificate Transparency search. A finding is a lead, not proof of malicious activity. <a href="{{ url_for('reports.ct_pdf') }}">Download PDF</a></p>
+</div>
+
+<div class="panel">
+  <div class="section-head">
+    <h2>Possible look-alikes</h2>
+    <span>{{ findings|length }} saved</span>
+  </div>
+  {% if findings %}
+  <table>
+    <tr><th>Domain</th><th>Similarity</th><th>Risk</th><th>Reason</th><th>Issuer</th></tr>
+    {% for f in findings %}
+    <tr>
+      <td><b>{{ f.detected_domain }}</b></td>
+      <td>{{ f.similarity_score }}%</td>
+      <td><span class="risk {{ f.risk_level|lower }}">{{ f.risk_level }}</span></td>
+      <td>{{ f.reason }}</td>
+      <td>{{ (f.issuer or '-')[:45] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty">No look-alike findings yet. Run a CT scan above.</div>
+  {% endif %}
+</div>
+{% endblock %}

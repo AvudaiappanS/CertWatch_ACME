@@ -1,65 +1,60 @@
+# CertWatch Lab deployment
+#   docker compose up -d            -> web + scheduler
+#   docker compose --profile pebble up -d   -> also starts the Pebble test CA
 services:
   web:
     build: .
-    container_name: certwatch-web
-    ports:
-      - "5000:5000"
-    env_file:
-      - .env
+    env_file: .env
     environment:
-      SECRET_KEY: ${SECRET_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      CERT_EXPIRY_WARNING_DAYS: ${CERT_EXPIRY_WARNING_DAYS}
-      ACME_DIRECTORY_URL: ${ACME_DIRECTORY_URL}
-      ACME_EMAIL: ${ACME_EMAIL}
-      ACME_DOMAIN: ${ACME_DOMAIN}
-      ACME_CA_CERT: ${ACME_CA_CERT}
-      ACME_STORAGE: ${ACME_STORAGE}
-      ACME_CERT_STORAGE: ${ACME_CERT_STORAGE}
+      SCHEDULER_ENABLED: "false"        # the scheduler container owns the jobs
+      ACME_PEBBLE_DIRECTORY: https://pebble:14000/dir
+    volumes:
+      - certwatch-data:/srv/certwatch/data
+    ports:
+      - "80:8000"                       # HTTP-01 challenges arrive on port 80
     depends_on:
-      db:
-        condition: service_healthy
       pebble:
         condition: service_started
-    volumes:
-      - certwatch_acme:/app/data/acme
-      - certwatch_certs:/app/certificates/acme
-      - ./pebble.minica.pem:/app/pebble.minica.pem:ro
+        required: false
+    mem_limit: 512m
     restart: unless-stopped
 
-  db:
-    image: mysql:8.4
-    container_name: certwatch-db
+  scheduler:
+    build: .
+    env_file: .env
+    command: ["python3", "-c", "from app import create_app; create_app(); import time; time.sleep(10**9)"]
     environment:
-      MYSQL_DATABASE: certwatch
-      MYSQL_USER: certwatch
-      MYSQL_PASSWORD: certwatch
-      MYSQL_ROOT_PASSWORD: rootpassword
-    ports:
-      - "3307:3306"
+      SCHEDULER_ENABLED: "true"
+      ACME_PEBBLE_DIRECTORY: https://pebble:14000/dir
     volumes:
-      - certwatch_mysql:/var/lib/mysql
+      - certwatch-data:/srv/certwatch/data
+    # The scheduler serves no HTTP port; health = its python process is alive.
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "certwatch", "-pcertwatch"]
-      interval: 5s
+      test: ["CMD", "python3", "-c", "import sys; sys.exit(0 if b'python3' in open('/proc/1/cmdline','rb').read() else 1)"]
+      interval: 30s
       timeout: 5s
-      retries: 20
+      retries: 3
+      start_period: 15s
+    mem_limit: 384m
     restart: unless-stopped
 
   pebble:
-    image: ghcr.io/letsencrypt/pebble:2.10.0
-    container_name: certwatch-pebble
-    command: -config /test/config/pebble-config.json
-    ports:
-      - "14000:14000"
-      - "15000:15000"
+    # Local RFC 8555 test CA - issues certificates without real validation.
+    # Test only; never expose it publicly.
+    image: ghcr.io/letsencrypt/pebble:latest
+    profiles: ["pebble"]
+    command: -config /test/config/pebble-config.json -strict  # the image entrypoint already runs pebble
     environment:
-      PEBBLE_VA_NOSLEEP: "1"
       PEBBLE_VA_ALWAYS_VALID: "1"
-      PEBBLE_WFE_NONCEREJECT: "0"
+      PEBBLE_VA_NOSLEEP: "1"
+    ports:
+      # localhost only - a test CA must never be exposed publicly.
+      # web/scheduler reach Pebble over the internal Docker network
+      # (ACME_PEBBLE_DIRECTORY=https://pebble:14000/dir), not these ports.
+      - "127.0.0.1:14000:14000"
+      - "127.0.0.1:15000:15000"
+    mem_limit: 512m
     restart: unless-stopped
 
 volumes:
-  certwatch_mysql:
-  certwatch_acme:
-  certwatch_certs:
+  certwatch-data:

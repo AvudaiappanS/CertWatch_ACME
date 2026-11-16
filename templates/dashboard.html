@@ -1,1 +1,67 @@
-{% extends "base.html" %}{% block content %}<h1>Certificate Security Dashboard</h1><div class="card"><h3>Certificate Inventory</h3><table><tr><th>Domain</th><th>Status</th><th>Expiry</th><th>TLS</th><th>Action</th></tr>{% for c in certificates %}<tr><td>{{c.domain}}</td><td>{{c.status}}</td><td>{{c.expiry_date}}</td><td>{{c.tls_version}}</td><td><form method="post" action="/renewal/{{c.id}}"><button>ACME Renew (Pebble)</button></form></td></tr>{% else %}<tr><td colspan="5">No certificates scanned yet.</td></tr>{% endfor %}</table></div><div class="card"><h3>Recent Scan Results</h3><table><tr><th>Time</th><th>Days</th><th>Risk</th><th>Status</th></tr>{% for s in scans %}<tr><td>{{s.scan_time}}</td><td>{{s.days_remaining}}</td><td>{{s.risk_score}}</td><td>{{s.scan_status}}</td></tr>{% else %}<tr><td colspan="4">No scans.</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<div class="hero">
+  <div>
+    <div class="eyebrow">SECURITY OVERVIEW</div>
+    <h1>Certificate Security Dashboard</h1>
+    <p>Search your domain, inspect its TLS certificate, monitor CT logs, and test ACME renewal.</p>
+  </div>
+  <a class="button" href="{{ url_for('scanner.search_page') }}">Search domain &rarr;</a>
+</div>
+
+<div class="cards">
+  <div class="card"><small>Domains scanned</small><strong>{{ stats.certificates }}</strong></div>
+  <div class="card"><small>CT findings saved</small><strong>{{ stats.findings }}</strong></div>
+  <div class="card"><small>ACME lab</small><strong>{{ acme_mode|upper }}</strong></div>
+</div>
+
+<div class="panel">
+  <div class="section-head">
+    <h2>Certificate inventory</h2>
+    <span>Live scan data</span>
+  </div>
+  {% if certs %}
+  <table>
+    <tr><th>Domain</th><th>TLS</th><th>Days left</th><th>Status</th><th>Action</th></tr>
+    {% for c in certs %}
+    <tr>
+      <td><a href="{{ url_for('scanner.certificate_detail', domain=c.domain) }}"><b>{{ c.domain }}</b></a></td>
+      <td>{{ c.tls_version or '-' }}</td>
+      <td>{{ c.days_remaining if c.days_remaining is not none else '-' }}</td>
+      <td><span class="badge badge-{{ 'valid' if c.status == 'Valid' else ('expiring' if c.status == 'Expiring Soon' else 'expired') }}">{{ c.status or 'unknown' }}</span></td>
+      <td>
+        <form method="post" action="{{ url_for('renewal.trigger') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="domain" value="{{ c.domain }}">
+          <button class="small-button" type="submit">ACME Lab Renew</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty">No certificates scanned yet. Use Search Domain to run the first scan.</div>
+  {% endif %}
+</div>
+
+<div class="two">
+  <div class="panel">
+    <div class="section-head"><h2>Recent scans</h2><span>latest first</span></div>
+    {% for s in recent_scans %}
+    <div class="row"><span>{{ s.scan_time.strftime('%d %b %H:%M') }} &middot; {{ s.certificate.domain if s.certificate else 'scan failed' }}</span>
+      <b>{% if s.status == 'Success' %}{{ s.days_remaining }} days &middot; risk {{ s.risk_score }}/100{% else %}Failed{% if s.error %} - {{ s.error[:40] }}{% endif %}{% endif %}</b></div>
+    {% else %}
+    <div class="empty">No scans yet.</div>
+    {% endfor %}
+  </div>
+  <div class="panel">
+    <div class="section-head"><h2>Recent ACME lab activity</h2><span>{{ acme_mode|upper }}</span></div>
+    {% for r in recent_renewals %}
+    <div class="row"><span>ACME / {{ r.acme_mode|upper }} &middot; {{ r.created_at.strftime('%d %b %H:%M') }}</span>
+      <b>{{ r.status }}</b></div>
+    {% else %}
+    <div class="empty">No ACME renewals yet. Use ACME Lab Renew on a certificate.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

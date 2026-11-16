@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">NOTIFICATIONS</div>
+<h1>Alert Center</h1>
+<p class="muted">Email and webhook alerts for certificates approaching expiry and new high-risk look-alike domains.</p>
+
+<div class="two">
+  <div class="panel">
+    <h2>Alert settings</h2>
+    <div class="details" style="margin-bottom:0">
+      <div><span>Expiry thresholds</span><b>30, 14 and 7 days</b></div>
+      <div><span>Look-alike alert level</span><b>High and Critical</b></div>
+      <div><span>Email (SMTP)</span><b>{{ email_state }}</b></div>
+      <div><span>Webhook</span><b>{{ webhook_state }}</b></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Delivery summary</h2>
+    <div class="row"><span>Alerts sent (7 days)</span><b>{{ summary.total }}</b></div>
+    <div class="row"><span>Email delivered</span><b>{{ summary.email }} / {{ summary.total }}</b></div>
+    <div class="row"><span>Webhook delivered</span><b>{{ summary.webhook }} / {{ summary.total }}</b></div>
+    {% if test_mode %}
+    <p class="muted" style="margin-top:12px">ALERT_TEST_MODE is on: alerts are recorded here without sending email or webhooks.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="section-head"><h2>Alert log</h2><span>Latest first</span></div>
+  {% if alerts %}
+  <table>
+    <tr><th>Time</th><th>Type</th><th>Subject</th><th>Severity</th><th>Channel</th></tr>
+    {% for a in alerts %}
+    <tr>
+      <td>{{ a.created_at.strftime('%d %b %H:%M') }}</td>
+      <td>{{ a.alert_type | replace('_', ' ') | title }}</td>
+      <td>{{ a.message }}</td>
+      <td><span class="risk {{ 'critical' if a.severity == 'Critical' else ('high' if a.severity == 'High' else ('medium' if a.severity == 'Warning' else 'low')) }}">{{ a.severity }}</span></td>
+      <td>{{ a.channel | replace('+', ' + ') | title }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty">No alerts yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

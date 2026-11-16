@@ -1,66 +1,139 @@
+"""Database models for CertWatch Lab.
+
+A Certificate has many ScanResults and many Renewals. Watchlist domains are
+scanned by the scheduler. CTFinding stores look-alike domains found through
+Certificate Transparency data. Alert and AuditLog record what the system did.
+"""
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from .extensions import db
 
+
 class User(db.Model):
-    __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(30), default="Analyst")
+    # Two roles: Administrator (manage watchlist, renewals, settings) and
+    # Analyst (run scans and view results).
+    role = db.Column(db.String(40), default="Analyst", nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
     @classmethod
     def create(cls, username, password, role="Analyst"):
-        u = cls(username=username, password_hash=generate_password_hash(password), role=role)
-        db.session.add(u); db.session.commit(); return u
+        user = cls(username=username,
+                   password_hash=generate_password_hash(password),
+                   role=role)
+        db.session.add(user)
+        db.session.commit()
+        return user
+
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+    @property
+    def is_admin(self):
+        return self.role == "Administrator"
+
+
 class Certificate(db.Model):
-    __tablename__ = "certificates"
     id = db.Column(db.Integer, primary_key=True)
-    domain = db.Column(db.String(255), nullable=False)
-    issuer = db.Column(db.String(255))
+    domain = db.Column(db.String(253), unique=True, nullable=False, index=True)
+    subject = db.Column(db.String(500))
+    san = db.Column(db.Text)  # comma-separated Subject Alternative Names
+    issuer = db.Column(db.String(500))
     serial_number = db.Column(db.String(255))
     issue_date = db.Column(db.DateTime)
     expiry_date = db.Column(db.DateTime)
-    tls_version = db.Column(db.String(50))
-    signature_algorithm = db.Column(db.String(100))
-    key_length = db.Column(db.Integer)
-    status = db.Column(db.String(50))
+    tls_version = db.Column(db.String(30))
+    verified = db.Column(db.Boolean, default=True)  # chain/hostname verification result
+    verify_error = db.Column(db.String(300))
+    status = db.Column(db.String(40))  # Valid / Expiring Soon / Expired
+    days_remaining = db.Column(db.Integer)
     last_scanned = db.Column(db.DateTime, default=datetime.utcnow)
 
+    scans = db.relationship("ScanResult", backref="certificate", lazy=True,
+                            cascade="all, delete-orphan")
+    renewals = db.relationship("Renewal", backref="certificate", lazy=True,
+                               cascade="all, delete-orphan")
+
+
 class ScanResult(db.Model):
-    __tablename__ = "scan_results"
     id = db.Column(db.Integer, primary_key=True)
-    certificate_id = db.Column(db.Integer, db.ForeignKey("certificates.id"))
+    certificate_id = db.Column(db.Integer, db.ForeignKey("certificate.id"), index=True)
     scan_time = db.Column(db.DateTime, default=datetime.utcnow)
     days_remaining = db.Column(db.Integer)
     risk_score = db.Column(db.Integer)
-    scan_status = db.Column(db.String(50))
+    risk_reasons = db.Column(db.Text)
+    status = db.Column(db.String(30))  # Success / Failed
+    error = db.Column(db.String(300))
 
-class Vulnerability(db.Model):
-    __tablename__ = "vulnerabilities"
+
+class Watchlist(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    certificate_id = db.Column(db.Integer, db.ForeignKey("certificates.id"))
-    name = db.Column(db.String(255))
-    severity = db.Column(db.String(30))
-    description = db.Column(db.Text)
-    detection_time = db.Column(db.DateTime, default=datetime.utcnow)
+    domain = db.Column(db.String(253), unique=True, nullable=False, index=True)
+    added_by = db.Column(db.String(80))
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+    active = db.Column(db.Boolean, default=True)
+
+
+class CTFinding(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    protected_domain = db.Column(db.String(253), nullable=False, index=True)
+    detected_domain = db.Column(db.String(253), nullable=False)
+    similarity_score = db.Column(db.Integer, nullable=False)
+    risk_level = db.Column(db.String(30), nullable=False)
+    reason = db.Column(db.Text)
+    issuer = db.Column(db.String(500))
+    ct_entry_id = db.Column(db.String(100))
+    first_seen = db.Column(db.DateTime, default=datetime.utcnow)
+    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("protected_domain", "detected_domain"),)
+
 
 class Renewal(db.Model):
-    __tablename__ = "renewals"
     id = db.Column(db.Integer, primary_key=True)
-    certificate_id = db.Column(db.Integer, db.ForeignKey("certificates.id"))
-    old_expiry_date = db.Column(db.DateTime)
-    new_expiry_date = db.Column(db.DateTime)
-    renewal_time = db.Column(db.DateTime, default=datetime.utcnow)
-    renewal_method = db.Column(db.String(50))
-    status = db.Column(db.String(50))
+    certificate_id = db.Column(db.Integer, db.ForeignKey("certificate.id"), index=True)
+    acme_mode = db.Column(db.String(20))       # pebble / staging / production
+    challenge_type = db.Column(db.String(20))  # HTTP-01
+    old_expiry = db.Column(db.DateTime)
+    new_expiry = db.Column(db.DateTime)
+    issuer = db.Column(db.String(500))
+    serial_number = db.Column(db.String(255))
+    status = db.Column(db.String(30))  # SUCCESS / FAILED
+    error = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-class Report(db.Model):
-    __tablename__ = "reports"
+
+class Alert(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255))
-    generating_user = db.Column(db.Integer, db.ForeignKey("users.id"))
-    generated_time = db.Column(db.DateTime, default=datetime.utcnow)
-    file_path = db.Column(db.String(500))
+    alert_type = db.Column(db.String(60))   # expiry / expired / lookalike / renewal_failed / renewal_success
+    severity = db.Column(db.String(20))     # Info / Warning / High / Critical
+    domain = db.Column(db.String(253), index=True)
+    threshold_days = db.Column(db.Integer)  # set for expiry alerts; used for deduplication
+    message = db.Column(db.Text)
+    channel = db.Column(db.String(120))     # email+webhook / test-mode
+    delivery_status = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class AuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ts = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    username = db.Column(db.String(80))
+    role = db.Column(db.String(40))
+    action = db.Column(db.String(80), index=True)
+    object = db.Column(db.String(253))   # domain / setting / job name
+    outcome = db.Column(db.String(30))   # SUCCESS / FAILED / DENIED
+    summary = db.Column(db.String(500))  # never contains secrets
+
+
+class JobStatus(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_name = db.Column(db.String(80), unique=True, nullable=False)
+    last_run = db.Column(db.DateTime)
+    next_run = db.Column(db.DateTime)
+    last_status = db.Column(db.String(30))  # Success / Failed / Never run
+    last_error = db.Column(db.String(300))
+    run_count = db.Column(db.Integer, default=0)

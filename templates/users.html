@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="eyebrow">ADMINISTRATOR</div>
+<h1>User accounts</h1>
+<div class="panel search-panel">
+  <h2>Create account</h2>
+  <form method="post" class="search-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="username" placeholder="username" required>
+    <input name="password" type="password" placeholder="password (min 10 chars)" required>
+    <select name="role" style="padding:12px;border:1px solid #d8e0e5;border-radius:8px">
+      <option>Analyst</option><option>Administrator</option>
+    </select>
+    <button type="submit">Create</button>
+  </form>
+</div>
+<div class="panel">
+  <table>
+    <tr><th>Username</th><th>Role</th><th>Created (UTC)</th></tr>
+    {% for u in users %}
+    <tr><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
